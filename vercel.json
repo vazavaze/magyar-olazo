@@ -1,0 +1,10 @@
+{
+  "env": [
+    {
+      "key": "GOOGLE_API_KEY",
+      "description": "Google Cloud Text-to-Speech API Key"
+    }
+  ],
+  "buildCommand": "echo 'Build complete'",
+  "outputDirectory": "public"
+}

@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Magyar Dokumentum Olvasó</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.5.1/mammoth.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        :root {
+            --bg: #ffffff; --bg2: #f5f5f5; --text: #1a1a1a; --text2: #666; --text3: #999;
+            --border: #e0e0e0; --info: #0066cc; --info-bg: #e6f0ff; --warn: #f57c00; --warn-bg: #fff3e0;
+            --danger: #d32f2f; --danger-bg: #ffebee;
+        }
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --bg: #1a1a1a; --bg2: #2a2a2a; --text: #fff; --text2: #b0b0b0; --text3: #808080;
+                --border: #404040; --info: #4da6ff; --info-bg: #0d3d66; --warn: #ffb74d; --warn-bg: #e65100;
+                --danger: #ff6b6b; --danger-bg: #3d1515;
+            }
+        }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); }
+        .container { max-width: 900px; margin: 0 auto; padding: 2rem; }
+        .header { margin-bottom: 2rem; }
+        .header h1 { font-size: 28px; font-weight: 600; margin-bottom: 0.5rem; }
+        .header p { font-size: 14px; color: var(--text2); }
+        .upload-area { background: var(--bg2); border: 2px dashed var(--border); border-radius: 12px; padding: 2rem; text-align: center; margin-bottom: 2rem; cursor: pointer; }
+        .upload-area:hover { background: var(--info-bg); border-color: var(--info); }
+        .upload-area input { display: none; }
+        .upload-area label { cursor: pointer; display: block; }
+        .upload-icon { font-size: 32px; margin-bottom: 0.5rem; }
+        .upload-area .title { font-size: 16px; font-weight: 500; margin: 0 0 0.5rem 0; }
+        .upload-area .subtitle { font-size: 13px; color: var(--text2); }
+        .alert { padding: 1rem; border-radius: 8px; margin-bottom: 1.5rem; font-size: 14px; border: 0.5px solid; display: none; }
+        .alert.show { display: block; }
+        .alert.error { background: var(--danger-bg); color: var(--danger); border-color: var(--danger); }
+        .alert.warning { background: var(--warn-bg); color: var(--warn); border-color: var(--warn); }
+        .loading { text-align: center; padding: 2rem; color: var(--text2); display: none; }
+        .loading.show { display: block; }
+        .controls { display: none; }
+        .controls.show { display: block; }
+        .file-info { background: var(--bg2); padding: 1rem; border-radius: 8px; margin-bottom: 1.5rem; font-size: 14px; color: var(--text2); display: flex; align-items: center; gap: 0.5rem; border: 0.5px solid var(--border); }
+        .file-info strong { color: var(--text); }
+        .buttons { display: flex; gap: 1rem; margin-bottom: 2rem; flex-wrap: wrap; }
+        button { padding: 0.75rem 1.5rem; font-size: 16px; font-weight: 500; border: 0.5px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--text); cursor: pointer; }
+        button:hover:not(:disabled) { background: var(--bg2); }
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
+        button.playing { background: var(--info); color: white; border-color: var(--info); }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1.5rem; margin-bottom: 2rem; }
+        .group label { display: block; font-size: 13px; font-weight: 500; color: var(--text2); margin-bottom: 0.75rem; }
+        .group select { width: 100%; padding: 0.75rem; border: 0.5px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--text); }
+        input[type="range"] { width: 100%; height: 4px; border-radius: 2px; cursor: pointer; accent-color: var(--info); }
+        .labels { display: flex; justify-content: space-between; font-size: 12px; color: var(--text3); margin-top: 0.5rem; }
+        .text { background: var(--bg2); border: 0.5px solid var(--border); border-radius: 8px; padding: 1.5rem; min-height: 300px; max-height: 600px; overflow-y: auto; font-family: Georgia, serif; font-size: 16px; line-height: 1.8; word-wrap: break-word; white-space: pre-wrap; }
+        .status { margin-top: 1rem; font-size: 13px; color: var(--text2); text-align: center; }
+        .progress { width: 100%; height: 2px; background: var(--border); border-radius: 1px; margin: 1rem 0; overflow: hidden; }
+        .progress-fill { height: 100%; background: var(--info); width: 0%; transition: width 0.3s; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📖 Magyar Dokumentum Olvasó</h1>
+            <p>Google Cloud Text-to-Speech professzionális magyar hanggal</p>
+        </div>
+
+        <div class="upload-area" id="uploadArea">
+            <input type="file" id="fileInput" accept=".pdf,.docx,.txt">
+            <label for="fileInput">
+                <div class="upload-icon">📤</div>
+                <p class="title">Kattints vagy húzd ide a fájlt</p>
+                <p class="subtitle">PDF, DOCX vagy TXT</p>
+            </label>
+        </div>
+
+        <div class="alert error" id="errorMsg"></div>
+        <div class="alert warning" id="warnMsg"></div>
+
+        <div class="loading" id="loading">⏳ Feldolgozás...</div>
+
+        <div class="controls" id="controls">
+            <div class="file-info">
+                <span>📄</span>
+                <strong id="fname"></strong>
+                <span id="fsize"></span>
+            </div>
+
+            <div class="progress" id="progress" style="display:none;">
+                <div class="progress-fill" id="progFill"></div>
+            </div>
+
+            <div class="buttons">
+                <button id="playBtn" disabled>▶ Hallgatás</button>
+                <button id="pauseBtn" disabled>⏸ Szünet</button>
+                <button id="stopBtn" disabled>⏹ Leállítás</button>
+            </div>
+
+            <div class="grid">
+                <div class="group">
+                    <label for="voice">🎤 Hang</label>
+                    <select id="voice">
+                        <option value="hu-HU-Standard-A">Női hang</option>
+                        <option value="hu-HU-Standard-B">Férfi hang</option>
+                    </select>
+                </div>
+
+                <div class="group">
+                    <label>🎚 Sebesség: <strong id="speedV">1.0</strong>x</label>
+                    <input type="range" id="speed" min="0.25" max="4" step="0.25" value="1">
+                    <div class="labels"><span>0.25x</span><span>4x</span></div>
+                </div>
+
+                <div class="group">
+                    <label>🔊 Hangerő: <strong id="volV">100</strong>%</label>
+                    <input type="range" id="volume" min="0" max="1" step="0.1" value="1">
+                    <div class="labels"><span>Csendes</span><span>Hangos</span></div>
+                </div>
+            </div>
+
+            <div class="text" id="preview"></div>
+            <div class="status" id="status"></div>
+        </div>
+    </div>
+
+    <script>
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+        let text = '';
+        let chunks = [];
+        let audioCtx = null;
+        let source = null;
+        let gain = null;
+        let speed = 1, vol = 1, voice = 'hu-HU-Standard-A';
+        let playing = false, curIdx = 0;
+
+        async function fromPDF(f) {
+            const buf = await f.arrayBuffer();
+            const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+            let t = '';
+            for (let i = 1; i <= pdf.numPages; i++) {
+                const p = await pdf.getPage(i);
+                const c = await p.getTextContent();
+                t += c.items.map(x => x.str).join(' ') + '\n';
+            }
+            return t;
+        }
+
+        async function fromDOCX(f) {
+            const buf = await f.arrayBuffer();
+            const r = await mammoth.extractRawText({ arrayBuffer: buf });
+            return r.value;
+        }
+
+        document.getElementById('uploadArea').addEventListener('click', () => document.getElementById('fileInput').click());
+        document.getElementById('fileInput').addEventListener('change', async (e) => {
+            const f = e.target.files[0];
+            if (!f) return;
+
+            document.getElementById('errorMsg').classList.remove('show');
+            document.getElementById('warnMsg').classList.remove('show');
+            document.getElementById('loading').classList.add('show');
+            document.getElementById('controls').classList.remove('show');
+            text = '';
+            stop();
+
+            try {
+                if (f.type === 'application/pdf') text = await fromPDF(f);
+                else if (f.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') text = await fromDOCX(f);
+                else if (f.type === 'text/plain') text = await f.text();
+                else throw new Error('Nem támogatott típus');
+
+                document.getElementById('fname').textContent = f.name;
+                document.getElementById('fsize').textContent = `(${text.length} karakter)`;
+                
+                const p = text.substring(0, 2000);
+                document.getElementById('preview').textContent = p;
+                if (text.length > 2000) {
+                    const s = document.createElement('span');
+                    s.style.color = 'var(--text3)';
+                    s.textContent = `\n\n... (és még ${text.length - 2000} karakter)`;
+                    document.getElementById('preview').appendChild(s);
+                }
+
+                showWarn('🔄 Hang előkészítése...');
+                await synth();
+                
+                document.getElementById('controls').classList.add('show');
+                document.getElementById('playBtn').disabled = false;
+                document.getElementById('stopBtn').disabled = false;
+                document.getElementById('errorMsg').classList.remove('show');
+                document.getElementById('warnMsg').classList.remove('show');
+                document.getElementById('status').textContent = '✅ Kész';
+            } catch (err) {
+                showErr('❌ ' + err.message);
+            } finally {
+                document.getElementById('loading').classList.remove('show');
+            }
+        });
+
+        function split(t, max = 4500) {
+            const out = [];
+            let cur = '';
+            const sents = t.match(/[^.!?]+[.!?]+/g) || [t];
+
+            for (let s of sents) {
+                const sb = new Blob([s]).size;
+                const cb = new Blob([cur]).size;
+                if (cb + sb > max && cur) {
+                    out.push(cur.trim());
+                    cur = '';
+                }
+                if (sb > max) {
+                    if (cur) { out.push(cur.trim()); cur = ''; }
+                    const ws = s.split(' ');
+                    let wc = '';
+                    for (const w of ws) {
+                        const wb = new Blob([wc + w + ' ']).size;
+                        if (wb > max && wc) {
+                            out.push(wc.trim());
+                            wc = w + ' ';
+                        } else {
+                            wc += w + ' ';
+                        }
+                    }
+                    if (wc) cur = wc;
+                } else {
+                    cur += s;
+                }
+            }
+            if (cur) out.push(cur.trim());
+            return out.filter(x => x.length > 0);
+        }
+
+        async function synth() {
+            chunks = [];
+            document.getElementById('progress').style.display = 'block';
+            const parts = split(text);
+
+            for (let i = 0; i < parts.length; i++) {
+                const r = await fetch('/api/synthesize', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        text: parts[i],
+                        voice: voice,
+                        speed: speed
+                    })
+                });
+
+                if (!r.ok) throw new Error((await r.json()).error || 'API hiba');
+                const d = await r.json();
+
+                const bin = atob(d.audioContent);
+                const bytes = new Uint8Array(bin.length);
+                for (let j = 0; j < bin.length; j++) bytes[j] = bin.charCodeAt(j);
+                const blob = new Blob([bytes], { type: 'audio/mp3' });
+                chunks.push(URL.createObjectURL(blob));
+
+                document.getElementById('progFill').style.width = ((i + 1) / parts.length * 100) + '%';
+            }
+            document.getElementById('progress').style.display = 'none';
+        }
+
+        function getCtx() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            return audioCtx;
+        }
+
+        async function playNext() {
+            if (curIdx >= chunks.length) {
+                stop();
+                document.getElementById('status').textContent = '✅ Kész';
+                return;
+            }
+
+            try {
+                const ctx = getCtx();
+                const r = await fetch(chunks[curIdx]);
+                const buf = await r.arrayBuffer();
+                const ab = await ctx.decodeAudioData(buf);
+
+                if (source) source.stop();
+                source = ctx.createBufferSource();
+                source.buffer = ab;
+                source.playbackRate.value = speed;
+
+                if (!gain) {
+                    gain = ctx.createGain();
+                    gain.connect(ctx.destination);
+                }
+                gain.gain.value = vol;
+                source.connect(gain);
+
+                playing = true;
+                document.getElementById('playBtn').textContent = '⏸ Szünet';
+                document.getElementById('playBtn').classList.add('playing');
+                document.getElementById('pauseBtn').disabled = false;
+                document.getElementById('status').textContent = '🎤 (' + (curIdx + 1) + '/' + chunks.length + ')';
+
+                source.onended = () => {
+                    curIdx++;
+                    if (playing) playNext();
+                };
+
+                source.start(0);
+            } catch (err) {
+                showErr('❌ ' + err.message);
+                stop();
+            }
+        }
+
+        function stop() {
+            if (audioCtx && audioCtx.state === 'running') audioCtx.suspend();
+            if (source) source.stop();
+            chunks.forEach(u => URL.revokeObjectURL(u));
+            chunks = [];
+            playing = false; curIdx = 0;
+            document.getElementById('playBtn').textContent = '▶ Hallgatás';
+            document.getElementById('playBtn').classList.remove('playing');
+            document.getElementById('pauseBtn').disabled = true;
+            document.getElementById('status').textContent = '';
+        }
+
+        document.getElementById('playBtn').addEventListener('click', () => {
+            if (playing) {
+                audioCtx.suspend();
+                playing = false;
+                document.getElementById('playBtn').textContent = '▶ Hallgatás';
+                document.getElementById('playBtn').classList.remove('playing');
+            } else {
+                if (curIdx >= chunks.length) curIdx = 0;
+                playNext();
+            }
+        });
+
+        document.getElementById('pauseBtn').addEventListener('click', () => {
+            audioCtx.suspend();
+            playing = false;
+            document.getElementById('playBtn').textContent = '▶ Hallgatás';
+            document.getElementById('playBtn').classList.remove('playing');
+        });
+
+        document.getElementById('stopBtn').addEventListener('click', stop);
+
+        document.getElementById('speed').addEventListener('input', (e) => {
+            speed = parseFloat(e.target.value);
+            document.getElementById('speedV').textContent = speed.toFixed(2);
+            if (source) source.playbackRate.value = speed;
+        });
+
+        document.getElementById('volume').addEventListener('input', (e) => {
+            vol = parseFloat(e.target.value);
+            document.getElementById('volV').textContent = Math.round(vol * 100);
+            if (gain) gain.gain.value = vol;
+        });
+
+        document.getElementById('voice').addEventListener('change', (e) => {
+            voice = e.target.value;
+            if (text) {
+                stop();
+                showWarn('🔄 Új hang...');
+                synth().then(() => {
+                    document.getElementById('errorMsg').classList.remove('show');
+                    document.getElementById('warnMsg').classList.remove('show');
+                    document.getElementById('status').textContent = '✅ Kész';
+                }).catch(err => showErr('❌ ' + err.message));
+            }
+        });
+
+        function showErr(m) {
+            document.getElementById('errorMsg').textContent = m;
+            document.getElementById('errorMsg').classList.add('show');
+        }
+
+        function showWarn(m) {
+            document.getElementById('warnMsg').textContent = m;
+            document.getElementById('warnMsg').classList.add('show');
+        }
+    </script>
+</body>
+</html>
